@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { parseAvailabilityFromHtml } from "@/lib/checker";
+import {
+  parseAvailabilityFromHtml,
+  parseAvailabilityFromHtmlWithAnchor,
+  type AvailabilitySignal,
+} from "@/lib/checker";
 
 export const runtime = "edge";
 
@@ -47,10 +51,10 @@ function extractRedirectTargetFromGateHtml(html: string): string | null {
   // cookie/待ちゲートのJS内にある遷移先を手動で辿る
   // 例: document.location.href = decodeURIComponent('%2F%3Fc%3D...%26t%3Dhttps%253A%252F%252Freserve...');
   const m = html.match(
-    /document\.location\.href\s*=\s*decodeURIComponent\('([^']+)'\)/m
+    /document\.location\.href\s*=\s*decodeURIComponent\((['"])(.+?)\1\)/m
   );
   if (!m) return null;
-  const encoded = m[1];
+  const encoded = m[2];
   let decoded: string;
   try {
     decoded = decodeURIComponent(encoded);
@@ -90,53 +94,90 @@ export async function POST(req: Request) {
   }
 
   try {
-    // 1) 通常取得
-    const r1 = await fetchHtml(url, false);
-    if (!r1.html) {
-      return NextResponse.json(
-        {
-          status: "unknown" as const,
-          httpStatus: r1.httpStatus,
-          message: "取得に失敗しました",
-        },
-        { status: 200 }
-      );
-    }
+    const u = new URL(url);
+    const searchHotelCD = u.searchParams.get("searchHotelCD") ?? undefined;
 
-    const queueDetected1 =
-      r1.html.includes("queue-it") ||
-      r1.html.includes("queueit") ||
-      r1.html.includes("待ち時間") ||
-      r1.html.includes("オンライン予約");
+    let currentUrl = url;
+    let cookieEnabled = false;
+    let status: AvailabilitySignal = "unknown";
+    let invalidChildInfo = false;
+    let lastReason: string | undefined;
 
-    let html = r1.html;
-    let status = parseAvailabilityFromHtml(html);
+    const steps: Array<{
+      size: number;
+      cookie: boolean;
+      queue: boolean;
+      parsed: AvailabilitySignal;
+      url: string;
+    }> = [];
 
-    // 2) Cookie/JS gate の場合は、HTML内の遷移先を辿って再取得
-    const gateTarget = extractRedirectTargetFromGateHtml(html);
-    if (gateTarget && (queueDetected1 || status === "unknown")) {
-      const rGate = await fetchHtml(gateTarget, true);
-      if (rGate.html) {
-        html = rGate.html;
-        status = parseAvailabilityFromHtml(html);
+    const MAX_DEPTH = 4;
+    for (let depth = 0; depth < MAX_DEPTH; depth++) {
+      const r = await fetchHtml(currentUrl, cookieEnabled);
+      if (!r.html) break;
+
+      const html = r.html;
+      invalidChildInfo = detectReservationInputError(html);
+
+      const queueDetected =
+        html.includes("queue-it") ||
+        html.includes("queueit") ||
+        html.includes("待ち時間") ||
+        html.includes("オンライン予約");
+
+      const parsed = invalidChildInfo
+        ? "unknown"
+        : parseAvailabilityFromHtmlWithAnchor(html, searchHotelCD);
+      status = parsed;
+
+      steps.push({
+        size: html.length,
+        cookie: cookieEnabled,
+        queue: queueDetected,
+        parsed,
+        url: currentUrl,
+      });
+
+      if (invalidChildInfo) {
+        lastReason = "invalid-child-info";
+        break;
       }
-    }
 
-    // queue/待ち画面っぽい場合は cookietest cookie を付けて再取得（Playwright不要）
-    if (queueDetected1 || status === "unknown") {
-      const r2 = await fetchHtml(url, true);
-      if (r2.html) {
-        html = r2.html;
-        status = parseAvailabilityFromHtml(html);
+      if (parsed !== "unknown") {
+        lastReason = queueDetected ? "queue-it" : undefined;
+        break;
       }
+
+      // JS gate の遷移先を辿る（何段階かあるため、何回か追従）
+      const target = extractRedirectTargetFromGateHtml(html);
+      if (target) {
+        currentUrl = target;
+        cookieEnabled = true;
+        continue;
+      }
+
+      // queue が出ているなら cookieEnabled を有効化して再試行
+      if (queueDetected) {
+        cookieEnabled = true;
+        continue;
+      }
+
+      break;
     }
 
-    const invalidChildInfo = detectReservationInputError(html);
+    if (!invalidChildInfo && status === "unknown") {
+      const anyQueue = steps.some((s) => s.queue);
+      lastReason = anyQueue ? "queue-it" : "parse-unknown";
+    }
+
     return NextResponse.json({
       status,
       checkedAt: new Date().toISOString(),
-      reason: queueDetected1 ? "queue-it" : undefined,
-      ...(invalidChildInfo ? { reason: "invalid-child-info" as const } : {}),
+      reason: lastReason,
+      debug: {
+        searchHotelCD,
+        steps,
+      },
     });
   } catch (e) {
     const aborted = e instanceof Error && e.name === "AbortError";

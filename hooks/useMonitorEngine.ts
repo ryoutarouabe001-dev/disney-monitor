@@ -60,6 +60,11 @@ export function useMonitorEngine() {
                 }
               );
             }
+          } else if (data.reason === "parse-unknown") {
+            toast.error("空き判定が取得できませんでした", {
+              description:
+                "公式予約サイト側がゲート/JS依存でHTMLにデータを含めない場合があります。しばらく待って再試行してください。",
+            });
           } else if (
             next === "unknown" &&
             data.reason === "queue-it" &&
