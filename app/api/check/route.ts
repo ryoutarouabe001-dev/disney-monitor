@@ -43,6 +43,36 @@ function detectReservationInputError(html: string): boolean {
   );
 }
 
+function extractRedirectTargetFromGateHtml(html: string): string | null {
+  // cookie/待ちゲートのJS内にある遷移先を手動で辿る
+  // 例: document.location.href = decodeURIComponent('%2F%3Fc%3D...%26t%3Dhttps%253A%252F%252Freserve...');
+  const m = html.match(
+    /document\.location\.href\s*=\s*decodeURIComponent\('([^']+)'\)/m
+  );
+  if (!m) return null;
+  const encoded = m[1];
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(encoded);
+  } catch {
+    return null;
+  }
+  // decoded が "/? ... &t=<realUrlEncoded>" のような形式なら t を辿る
+  try {
+    const asUrl = decoded.startsWith("http")
+      ? new URL(decoded)
+      : new URL(decoded, "https://reserve.tokyodisneyresort.jp");
+    const t = asUrl.searchParams.get("t");
+    if (t) {
+      // t はさらに URLエンコードされた値
+      return decodeURIComponent(t);
+    }
+  } catch {
+    // ignore
+  }
+  return decoded;
+}
+
 export async function POST(req: Request) {
   let body: Body;
   try {
@@ -60,6 +90,7 @@ export async function POST(req: Request) {
   }
 
   try {
+    // 1) 通常取得
     const r1 = await fetchHtml(url, false);
     if (!r1.html) {
       return NextResponse.json(
@@ -80,6 +111,16 @@ export async function POST(req: Request) {
 
     let html = r1.html;
     let status = parseAvailabilityFromHtml(html);
+
+    // 2) Cookie/JS gate の場合は、HTML内の遷移先を辿って再取得
+    const gateTarget = extractRedirectTargetFromGateHtml(html);
+    if (gateTarget && (queueDetected1 || status === "unknown")) {
+      const rGate = await fetchHtml(gateTarget, true);
+      if (rGate.html) {
+        html = rGate.html;
+        status = parseAvailabilityFromHtml(html);
+      }
+    }
 
     // queue/待ち画面っぽい場合は cookietest cookie を付けて再取得（Playwright不要）
     if (queueDetected1 || status === "unknown") {
