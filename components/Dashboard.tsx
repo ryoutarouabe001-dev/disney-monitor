@@ -12,32 +12,21 @@ import { getHotelLabel } from "@/lib/urlBuilder";
 export function Dashboard() {
   const monitors = useMonitorStore((s) => s.monitors);
   const logs = useMonitorStore((s) => s.logs);
-  const [hydrated, setHydrated] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    const { persist } = useMonitorStore;
-    if (persist.hasHydrated()) {
-      setHydrated(true);
-    }
-    const unsub = persist.onFinishHydration(() => setHydrated(true));
-    void persist.rehydrate();
-    return unsub;
+    setMounted(true);
   }, []);
 
-  if (!hydrated) {
+  if (!mounted) {
     return (
       <section className="px-4 py-10">
         <div className="mx-auto max-w-3xl space-y-4">
           <Skeleton className="h-10 w-48" />
           <Skeleton className="h-40 w-full" />
-          <Skeleton className="h-40 w-full" />
         </div>
       </section>
     );
-  }
-
-  if (monitors.length === 0) {
-    return null;
   }
 
   return (
@@ -61,11 +50,23 @@ export function Dashboard() {
           </div>
         </motion.div>
 
+        {monitors.length === 0 ? (
+          <div className="rounded-2xl border border-slate-200/80 bg-white/70 p-6 text-center shadow-sm backdrop-blur-md">
+            <p className="text-sm font-semibold text-slate-900">
+              監視ダッシュボードはまだ空です
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              右上の「この条件で空きを監視」から監視を追加すると、
+              ここにカードとチェックログが表示されます。
+            </p>
+          </div>
+        ) : (
         <div className="space-y-4">
           {monitors.map((m) => (
             <MonitorCard key={m.id} monitor={m} />
           ))}
         </div>
+        )}
 
         <div className="rounded-2xl border border-slate-200/80 bg-white/80 p-5 shadow-sm backdrop-blur-md">
           <h3 className="text-sm font-semibold text-slate-900">

@@ -5,7 +5,7 @@ import {
   type AvailabilitySignal,
 } from "@/lib/checker";
 
-export const runtime = "edge";
+export const runtime = "nodejs";
 
 const FETCH_TIMEOUT_MS = 15_000;
 
