@@ -14,6 +14,7 @@ import {
 } from "@/lib/urlBuilder";
 import {
   formatChildSummaryJa,
+  buildChildAgeBedInform,
   type ChildGuestInput,
   type SixYearTrack,
   type TdrChildBedKey,
@@ -54,6 +55,7 @@ function defaultChildSlot(): ChildGuestInput {
 export function MonitorForm() {
   const addMonitor = useMonitorStore((s) => s.addMonitor);
   const canAdd = useMonitorStore((s) => s.canAddMonitor());
+  const [hotelMode, setHotelMode] = useState<"single" | "all">("single");
 
   const [hotelId, setHotelId] = useState<HotelId>(DISNEY_HOTELS[0].id);
   const [date, setDate] = useState<Date | undefined>(
@@ -75,8 +77,9 @@ export function MonitorForm() {
   const previewUrl = useMemo(() => {
     if (!date) return null;
     try {
+      const targetHotelId = hotelMode === "all" ? DISNEY_HOTELS[0].id : hotelId;
       return buildDisneyUrl({
-        hotelId,
+        hotelId: targetHotelId,
         date,
         nights: Number(nights),
         guests: Number(guests),
@@ -90,12 +93,23 @@ export function MonitorForm() {
   }, [
     date,
     hotelId,
+    hotelMode,
     nights,
     guests,
     childGuests,
     childSlots,
     roomType,
   ]);
+
+  const debugChildAgeBedInform = useMemo(() => {
+    const cn = Math.min(Math.max(Number(childGuests), 0), 4);
+    if (cn <= 0) return "";
+    try {
+      return buildChildAgeBedInform(childSlots.slice(0, cn));
+    } catch {
+      return "";
+    }
+  }, [childGuests, childSlots]);
 
   useEffect(() => {
     const n = Math.min(Math.max(Number(childGuests), 0), 4);
@@ -135,8 +149,8 @@ export function MonitorForm() {
     }
     setBusy(true);
     await new Promise((r) => setTimeout(r, 280));
-    const result = addMonitor({
-      hotelId,
+
+    const baseInput = {
       checkInDate: date,
       nights: Number(nights),
       guests: Number(guests),
@@ -146,13 +160,31 @@ export function MonitorForm() {
       notifyLine,
       notifyEmail,
       notifyEmailAddress: notifyEmail ? email.trim() : undefined,
-    });
+    };
+
+    let lastResult: { ok: true } | { ok: false; reason: string } | undefined;
+
+    if (hotelMode === "all") {
+      for (const h of DISNEY_HOTELS) {
+        lastResult = addMonitor({
+          hotelId: h.id,
+          ...baseInput,
+        });
+        if (!lastResult.ok) break;
+      }
+    } else {
+      lastResult = addMonitor({
+        hotelId,
+        ...baseInput,
+      });
+    }
     setBusy(false);
-    if (!result.ok) {
-      toast.error(result.reason);
+    if (!lastResult || !lastResult.ok) {
+      toast.error(lastResult?.reason ?? "監視を開始できませんでした");
       return;
     }
-    toast.success("監視を開始しました", {
+
+    toast.success(hotelMode === "all" ? "全ホテルで監視を開始しました" : "監視を開始しました", {
       description: "このタブを開いたままにするとチェックが継続します。",
     });
   };
@@ -182,7 +214,7 @@ export function MonitorForm() {
                   いまの条件（プレビュー）
                 </p>
                 <p className="mt-1 text-sm font-semibold text-slate-900">
-                  {getHotelLabel(hotelId)} ·{" "}
+                  {hotelMode === "all" ? "全ホテル" : getHotelLabel(hotelId)} ·{" "}
                   {date ? format(date, "PPP", { locale: ja }) : "日付未選択"} ·{" "}
                   {nights}泊 · 大人{guests}名
                   {Number(childGuests) > 0 ? (
@@ -208,7 +240,9 @@ export function MonitorForm() {
                       window.open(previewUrl, "_blank", "noopener,noreferrer");
                     }}
                   >
-                    この条件で予約ページへ
+                    {hotelMode === "all"
+                      ? "代表ホテルの予約ページへ"
+                      : "この条件で予約ページへ"}
                   </Button>
                   <Button
                     size="sm"
@@ -225,28 +259,102 @@ export function MonitorForm() {
                       }
                     }}
                   >
-                    URLをコピー
+                    {hotelMode === "all" ? "代表URLをコピー" : "URLをコピー"}
                   </Button>
                 </div>
+
+                {Number(childGuests) > 0 && (
+                  <div className="mt-3 rounded-lg bg-slate-900/5 p-3">
+                    <p className="text-xs font-medium text-slate-600">
+                      デバッグ：公式パラメータ `childAgeBedInform`
+                    </p>
+                    <div className="mt-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <code className="break-all rounded bg-white/70 px-2 py-1 text-xs text-slate-800 ring-1 ring-slate-200/80">
+                        {debugChildAgeBedInform}
+                      </code>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="rounded-xl"
+                        disabled={!debugChildAgeBedInform}
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(
+                              debugChildAgeBedInform
+                            );
+                            toast.success("childAgeBedInform をコピーしました");
+                          } catch {
+                            toast.error("コピーに失敗しました");
+                          }
+                        }}
+                      >
+                        コピー
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2">
-                <Label>ホテル</Label>
-                <Select
-                  value={hotelId}
-                  onValueChange={(v) => setHotelId(v as HotelId)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="ホテルを選択" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DISNEY_HOTELS.map((h) => (
-                      <SelectItem key={h.id} value={h.id}>
-                        {h.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>ホテル対象</Label>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    type="button"
+                    variant={hotelMode === "single" ? "default" : "secondary"}
+                    className="rounded-xl"
+                    onClick={() => setHotelMode("single")}
+                  >
+                    ホテル別
+                  </Button>
+                  <Button
+                    size="sm"
+                    type="button"
+                    variant={hotelMode === "all" ? "default" : "secondary"}
+                    className="rounded-xl"
+                    onClick={() => setHotelMode("all")}
+                  >
+                    全ホテル
+                  </Button>
+                </div>
+
+                {hotelMode === "single" ? (
+                  <Select
+                    value={hotelId}
+                    onValueChange={(v) => setHotelId(v as HotelId)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="ホテルを選択" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DISNEY_HOTELS.map((h) => (
+                        <SelectItem key={h.id} value={h.id}>
+                          {h.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <div className="rounded-xl border border-slate-200/70 bg-white/50 p-3">
+                    <p className="text-sm font-semibold text-slate-900">
+                      対象ホテル：{DISNEY_HOTELS.length}件
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      監視はこの条件で全ホテルを作成します。
+                      予約URLは各監視カードの「今すぐ予約」から開けます。
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {DISNEY_HOTELS.map((h) => (
+                        <span
+                          key={h.id}
+                          className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700"
+                        >
+                          {h.name.replace("®", "")}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
@@ -384,7 +492,7 @@ export function MonitorForm() {
                                         <SelectValue />
                                       </SelectTrigger>
                                       <SelectContent>
-                                        {Array.from({ length: 18 }).map(
+                                        {Array.from({ length: 12 }).map(
                                           (_, a) => (
                                             <SelectItem key={a} value={String(a)}>
                                               {a}歳
@@ -442,9 +550,6 @@ export function MonitorForm() {
                                         </SelectItem>
                                         <SelectItem value="soine">
                                           添い寝（コード3）
-                                        </SelectItem>
-                                        <SelectItem value="defaultExample">
-                                          その他（コード2）
                                         </SelectItem>
                                       </SelectContent>
                                     </Select>
