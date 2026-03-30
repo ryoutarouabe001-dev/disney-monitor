@@ -31,6 +31,18 @@ export type Monitor = {
   createdAt: string;
 };
 
+/** フォーム・API から渡す新規監視条件（checkIn は addMonitor 内で生成） */
+export type AddMonitorInput = {
+  hotelId: HotelId;
+  checkInDate: Date;
+  nights: number;
+  guests: number;
+  roomType?: string;
+  notifyLine: boolean;
+  notifyEmail: boolean;
+  notifyEmailAddress?: string;
+};
+
 const FREE_MAX_MONITORS = 1;
 const MIN_INTERVAL_MS = 60_000;
 
@@ -40,16 +52,7 @@ type MonitorState = {
   /** Free tier: false. Pro UI prepared; no payment yet. */
   isPro: boolean;
   checkIntervalMs: number;
-  addMonitor: (input: Omit<
-    Monitor,
-    | "id"
-    | "bookingUrl"
-    | "previousStatus"
-    | "currentStatus"
-    | "lastChecked"
-    | "createdAt"
-    | "enabled"
-  > & { checkInDate: Date }) => { ok: true } | { ok: false; reason: string };
+  addMonitor: (input: AddMonitorInput) => { ok: true } | { ok: false; reason: string };
   updateMonitor: (id: string, patch: Partial<Monitor>) => void;
   removeMonitor: (id: string) => void;
   setStatuses: (
@@ -89,7 +92,7 @@ export const useMonitorStore = create<MonitorState>()(
         return monitors.length < FREE_MAX_MONITORS;
       },
 
-      addMonitor: (input) => {
+      addMonitor: (input: AddMonitorInput) => {
         const { canAddMonitor } = get();
         if (!canAddMonitor()) {
           return {
