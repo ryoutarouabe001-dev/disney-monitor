@@ -1,12 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 import { motion } from "framer-motion";
 import { CalendarIcon, Loader2, Settings2 } from "lucide-react";
 import { toast } from "sonner";
-import { DISNEY_HOTELS, type HotelId } from "@/lib/urlBuilder";
+import {
+  DISNEY_HOTELS,
+  type HotelId,
+  getHotelLabel,
+  buildDisneyUrl,
+} from "@/lib/urlBuilder";
 import { useMonitorStore } from "@/store/monitorStore";
 import { Button } from "@/components/ui/button";
 import {
@@ -48,6 +53,8 @@ export function MonitorForm() {
   );
   const [nights, setNights] = useState("1");
   const [guests, setGuests] = useState("2");
+  const [childGuests, setChildGuests] = useState("0");
+  const [childAges, setChildAges] = useState<number[]>([]);
   const [advanced, setAdvanced] = useState(false);
   const [roomType, setRoomType] = useState("");
   const [notifyLine, setNotifyLine] = useState(true);
@@ -56,6 +63,40 @@ export function MonitorForm() {
   const [busy, setBusy] = useState(false);
 
   const disabledAdd = useMemo(() => !canAdd, [canAdd]);
+
+  const previewUrl = useMemo(() => {
+    if (!date) return null;
+    try {
+      return buildDisneyUrl({
+        hotelId,
+        date,
+        nights: Number(nights),
+        guests: Number(guests),
+        childGuests: Number(childGuests),
+        childAges,
+        roomType: roomType.trim() || undefined,
+      });
+    } catch {
+      return null;
+    }
+  }, [
+    date,
+    hotelId,
+    nights,
+    guests,
+    childGuests,
+    childAges,
+    roomType,
+  ]);
+
+  useEffect(() => {
+    const n = Math.min(Math.max(Number(childGuests), 0), 4);
+    setChildAges((prev) => {
+      const next = [...prev];
+      while (next.length < n) next.push(0);
+      return next.slice(0, n);
+    });
+  }, [childGuests]);
 
   const onSubmit = async () => {
     if (!date) {
@@ -73,6 +114,8 @@ export function MonitorForm() {
       checkInDate: date,
       nights: Number(nights),
       guests: Number(guests),
+      childGuests: Number(childGuests),
+      childAges,
       roomType: roomType.trim() || undefined,
       notifyLine,
       notifyEmail,
@@ -98,7 +141,9 @@ export function MonitorForm() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
         >
-          <Card className="glass-panel border-white/50 shadow-glass">
+          <Card className="glass-panel border-white/50 shadow-glass relative overflow-hidden">
+            <div className="pointer-events-none absolute -top-24 left-1/2 h-56 w-56 -translate-x-1/2 rounded-full bg-brand/15 blur-2xl" />
+            <div className="pointer-events-none absolute -bottom-28 right-0 h-64 w-64 rounded-full bg-accent-gold-muted blur-2xl" />
             <CardHeader>
               <CardTitle className="text-xl">条件を入れて、あとは待つだけ</CardTitle>
               <CardDescription>
@@ -106,6 +151,57 @@ export function MonitorForm() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
+              <div className="rounded-xl border border-slate-200/70 bg-white/60 px-4 py-3 shadow-sm">
+                <p className="text-xs font-medium text-slate-500">
+                  いまの条件（プレビュー）
+                </p>
+                <p className="mt-1 text-sm font-semibold text-slate-900">
+                  {getHotelLabel(hotelId)} ·{" "}
+                  {date ? format(date, "PPP", { locale: ja }) : "日付未選択"} ·{" "}
+                  {nights}泊 · 大人{guests}名
+                  {Number(childGuests) > 0 ? (
+                    <>
+                      {" "}
+                      ・子ども{childGuests}名（{childAges
+                        .slice(0, Number(childGuests))
+                        .join("、")}歳）
+                    </>
+                  ) : null}
+                </p>
+
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={!previewUrl}
+                    className="rounded-xl"
+                    onClick={() => {
+                      if (!previewUrl) return;
+                      window.open(previewUrl, "_blank", "noopener,noreferrer");
+                    }}
+                  >
+                    この条件で予約ページへ
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={!previewUrl}
+                    className="rounded-xl"
+                    onClick={async () => {
+                      if (!previewUrl) return;
+                      try {
+                        await navigator.clipboard.writeText(previewUrl);
+                        toast.success("予約URLをコピーしました");
+                      } catch {
+                        toast.error("コピーに失敗しました");
+                      }
+                    }}
+                  >
+                    URLをコピー
+                  </Button>
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <Label>ホテル</Label>
                 <Select
@@ -172,7 +268,7 @@ export function MonitorForm() {
               </div>
 
               <div className="space-y-2">
-                <Label>人数（大人）</Label>
+                <Label>大人（1〜4）</Label>
                 <Select value={guests} onValueChange={setGuests}>
                   <SelectTrigger>
                     <SelectValue />
@@ -207,6 +303,57 @@ export function MonitorForm() {
                   animate={{ opacity: 1, height: "auto" }}
                   className="space-y-4 overflow-hidden"
                 >
+                  <div className="space-y-2">
+                    <Label>子ども（任意）</Label>
+                    <Select value={childGuests} onValueChange={setChildGuests}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="0" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {["0", "1", "2", "3", "4"].map((n) => (
+                          <SelectItem key={n} value={n}>
+                            {n}名
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {Number(childGuests) > 0 && (
+                      <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                        {Array.from({ length: Number(childGuests) }).map(
+                          (_, idx) => (
+                            <div key={idx} className="space-y-2">
+                              <p className="text-xs font-medium text-slate-700">
+                                子ども{idx + 1}の年齢
+                              </p>
+                              <Select
+                                value={String(childAges[idx] ?? 0)}
+                                onValueChange={(v) => {
+                                  const age = Number(v);
+                                  setChildAges((prev) => {
+                                    const next = [...prev];
+                                    next[idx] = age;
+                                    return next;
+                                  });
+                                }}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {Array.from({ length: 18 }).map((__, a) => (
+                                    <SelectItem key={a} value={String(a)}>
+                                      {a}歳
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )
+                        )}
+                      </div>
+                    )}
+                  </div>
+
                   <div className="space-y-2">
                     <Label>ルームタイプ（任意）</Label>
                     <Input

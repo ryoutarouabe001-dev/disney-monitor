@@ -47,6 +47,10 @@ export type BuildDisneyUrlParams = {
   date: Date;
   nights: number;
   guests: number;
+  /** Child guests count (任意) */
+  childGuests?: number;
+  /** Each child's age (in years). Length should match `childGuests` */
+  childAges?: number[];
   /** Reserved for future room-type deep links */
   roomType?: string;
 };
@@ -59,7 +63,15 @@ const RESERVE_BASE =
  * Fragment after pathname may change — centralize tweaks in this module only.
  */
 export function buildDisneyUrl(params: BuildDisneyUrlParams): string {
-  const { hotelId, date, nights, guests, roomType } = params;
+  const {
+    hotelId,
+    date,
+    nights,
+    guests,
+    childGuests,
+    childAges,
+    roomType,
+  } = params;
   const hotel = DISNEY_HOTELS.find((h) => h.id === hotelId);
   if (!hotel) {
     throw new Error(`Unknown hotel: ${hotelId}`);
@@ -68,6 +80,7 @@ export function buildDisneyUrl(params: BuildDisneyUrlParams): string {
   const useDate = format(date, "yyyyMMdd");
   const stayingDays = Math.min(Math.max(nights, 1), 3);
   const adultNum = Math.min(Math.max(guests, 1), 4);
+  const childNum = Math.min(Math.max(childGuests ?? 0, 0), 4);
 
   const search = new URLSearchParams({
     displayType: "hotel-search",
@@ -77,9 +90,19 @@ export function buildDisneyUrl(params: BuildDisneyUrlParams): string {
     stayingDays: String(stayingDays),
     adultNum: String(adultNum),
     searchHotelCD: hotel.searchHotelCD,
-    childNum: "0",
+    childNum: String(childNum),
     roomsNum: "1",
   });
+
+  // TDR reservation site expects a "age info" string when `childNum` > 0.
+  // The exact format can change; keep adjustments centralized here.
+  if (childNum > 0) {
+    const ages = (childAges ?? []).slice(0, childNum).map((a) => a ?? 0);
+    if (ages.length > 0) {
+      // Best-effort format: comma-separated ages (e.g. "3,7")
+      search.set("childAgeBedInform", ages.join(","));
+    }
+  }
 
   if (roomType?.trim()) {
     search.set("searchRoomName", roomType.trim());

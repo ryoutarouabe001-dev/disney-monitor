@@ -19,6 +19,8 @@ export type Monitor = {
   checkIn: string;
   nights: number;
   guests: number;
+  childGuests: number;
+  childAges: number[];
   roomType?: string;
   notifyLine: boolean;
   notifyEmail: boolean;
@@ -37,6 +39,8 @@ export type AddMonitorInput = {
   checkInDate: Date;
   nights: number;
   guests: number;
+  childGuests?: number;
+  childAges?: number[];
   roomType?: string;
   notifyLine: boolean;
   notifyEmail: boolean;
@@ -52,6 +56,12 @@ type MonitorState = {
   /** Free tier: false. Pro UI prepared; no payment yet. */
   isPro: boolean;
   checkIntervalMs: number;
+  /**
+   * "今すぐチェック要求" のためのカウンタ。
+   * 追加直後に UI が即時でステータス反映されるように使う。
+   * 永続化しない（サーバー/別タブで意味が変わるため）。
+   */
+  tickNonce: number;
   addMonitor: (input: AddMonitorInput) => { ok: true } | { ok: false; reason: string };
   updateMonitor: (id: string, patch: Partial<Monitor>) => void;
   removeMonitor: (id: string) => void;
@@ -67,6 +77,7 @@ type MonitorState = {
   setPro: (v: boolean) => void;
   getIntervalMs: () => number;
   canAddMonitor: () => boolean;
+  requestCheckNow: () => void;
 };
 
 function newId() {
@@ -80,6 +91,7 @@ export const useMonitorStore = create<MonitorState>()(
       logs: [],
       isPro: false,
       checkIntervalMs: MIN_INTERVAL_MS,
+      tickNonce: 0,
 
       getIntervalMs: () => {
         const { isPro } = get();
@@ -105,6 +117,8 @@ export const useMonitorStore = create<MonitorState>()(
           date: input.checkInDate,
           nights: input.nights,
           guests: input.guests,
+          childGuests: input.childGuests ?? 0,
+          childAges: input.childAges ?? [],
           roomType: input.roomType,
         });
 
@@ -114,6 +128,11 @@ export const useMonitorStore = create<MonitorState>()(
           checkIn: input.checkInDate.toISOString(),
           nights: input.nights,
           guests: input.guests,
+          childGuests: input.childGuests ?? 0,
+          childAges: (input.childAges ?? []).slice(
+            0,
+            Math.min(Math.max(input.childGuests ?? 0, 0), 4)
+          ),
           roomType: input.roomType,
           notifyLine: input.notifyLine,
           notifyEmail: input.notifyEmail,
@@ -126,7 +145,10 @@ export const useMonitorStore = create<MonitorState>()(
           createdAt: new Date().toISOString(),
         };
 
-        set((s) => ({ monitors: [monitor, ...s.monitors] }));
+        set((s) => ({
+          monitors: [monitor, ...s.monitors],
+          tickNonce: Date.now(),
+        }));
         return { ok: true };
       },
 
@@ -164,6 +186,7 @@ export const useMonitorStore = create<MonitorState>()(
         }),
 
       setPro: (v) => set({ isPro: v }),
+      requestCheckNow: () => set({ tickNonce: Date.now() }),
     }),
     {
       name: "magic-vacancy-monitors",

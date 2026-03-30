@@ -23,6 +23,7 @@ function statusBadge(status: AvailabilitySignal | null) {
 export function MonitorCard({ monitor }: { monitor: Monitor }) {
   const updateMonitor = useMonitorStore((s) => s.updateMonitor);
   const removeMonitor = useMonitorStore((s) => s.removeMonitor);
+  const isAvailable = monitor.currentStatus === "available";
 
   return (
     <motion.div
@@ -51,7 +52,14 @@ export function MonitorCard({ monitor }: { monitor: Monitor }) {
           </h3>
           <p className="text-sm text-slate-600">
             {formatJaDate(monitor.checkIn)} · {monitor.nights}泊 ·{" "}
-            {monitor.guests}名
+            大人{monitor.guests}名
+            {monitor.childGuests > 0 ? (
+              <>
+                {" "}
+                ・子ども{monitor.childGuests}名（
+                {(monitor.childAges ?? []).slice(0, monitor.childGuests).join("、")}歳）
+              </>
+            ) : null}
             {monitor.roomType ? ` · ${monitor.roomType}` : ""}
           </p>
           <p className="text-xs text-slate-500">
@@ -70,14 +78,18 @@ export function MonitorCard({ monitor }: { monitor: Monitor }) {
             />
           </div>
           <div className="flex gap-2">
-            <Button variant="secondary" size="sm" asChild>
+            <Button
+              variant={isAvailable ? "gold" : "secondary"}
+              size="sm"
+              asChild
+            >
               <a
                 href={monitor.bookingUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="gap-1"
               >
-                予約ページ
+                {isAvailable ? "今すぐ予約" : "予約ページ"}
                 <ExternalLink className="h-3.5 w-3.5" />
               </a>
             </Button>
