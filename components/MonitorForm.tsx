@@ -479,6 +479,9 @@ export function MonitorForm() {
                                 <p className="mb-3 text-xs font-semibold text-slate-800">
                                   お子さま {idx + 1}
                                 </p>
+                                <p className="mb-3 text-[11px] text-slate-500">
+                                  この順（お子さま1→2→…）が `childAgeBedInform` の並びに反映されます。
+                                </p>
                                 <div className="grid gap-3 sm:grid-cols-2">
                                   <div className="space-y-2">
                                     <Label className="text-xs">年齢</Label>
