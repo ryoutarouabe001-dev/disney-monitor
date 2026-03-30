@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { Check } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -20,7 +21,7 @@ const freeFeatures = [
 
 const proFeatures = [
   "監視条件 無制限",
-  "高頻度チェック（10秒）※準備中",
+  "高頻度チェック（10秒）",
   "優先通知ルート",
   "履歴エクスポート（予定）",
 ];
@@ -83,7 +84,7 @@ export function Pricing() {
           >
             <Card className="relative h-full overflow-hidden border-brand/25 bg-gradient-to-b from-white to-brand/5 shadow-glass backdrop-blur-xl ring-1 ring-brand/20">
               <div className="absolute right-4 top-4 rounded-full bg-accent-gold/25 px-2.5 py-0.5 text-xs font-semibold text-slate-800">
-                Coming soon
+                有効化済み
               </div>
               <CardHeader>
                 <CardTitle className="text-xl">Pro</CardTitle>
@@ -105,11 +106,13 @@ export function Pricing() {
                   ))}
                 </ul>
                 <Button
-                  disabled
                   variant="gold"
-                  className="w-full cursor-not-allowed rounded-xl opacity-80"
+                  className="w-full rounded-xl"
+                  onClick={() =>
+                    toast.message("Proはすでに有効です。監視を追加してお使いください。")
+                  }
                 >
-                  Pro を購入（準備中）
+                  Pro（全機能）を利用中
                 </Button>
                 <p className="text-center text-[11px] text-slate-500">
                   決済連携はStripe等で後から接続可能な構造です。

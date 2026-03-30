@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import {
   buildDisneyUrl,
+  type ChildGuestInput,
   type HotelId,
 } from "@/lib/urlBuilder";
 import type { AvailabilitySignal } from "@/lib/checker";
@@ -20,7 +21,7 @@ export type Monitor = {
   nights: number;
   guests: number;
   childGuests: number;
-  childAges: number[];
+  childSlots: ChildGuestInput[];
   roomType?: string;
   notifyLine: boolean;
   notifyEmail: boolean;
@@ -40,7 +41,7 @@ export type AddMonitorInput = {
   nights: number;
   guests: number;
   childGuests?: number;
-  childAges?: number[];
+  childSlots?: ChildGuestInput[];
   roomType?: string;
   notifyLine: boolean;
   notifyEmail: boolean;
@@ -49,6 +50,7 @@ export type AddMonitorInput = {
 
 const FREE_MAX_MONITORS = 1;
 const MIN_INTERVAL_MS = 60_000;
+const PRO_INTERVAL_MS = 10_000;
 
 type MonitorState = {
   monitors: Monitor[];
@@ -89,36 +91,36 @@ export const useMonitorStore = create<MonitorState>()(
     (set, get) => ({
       monitors: [],
       logs: [],
-      isPro: false,
-      checkIntervalMs: MIN_INTERVAL_MS,
+      // リクエストに合わせて「Pro制限なし」で動かす（課金UIは残すが実機能は常時有効）
+      isPro: true,
+      checkIntervalMs: PRO_INTERVAL_MS,
       tickNonce: 0,
 
       getIntervalMs: () => {
         const { isPro } = get();
-        return isPro ? 10_000 : MIN_INTERVAL_MS;
+        return isPro ? PRO_INTERVAL_MS : MIN_INTERVAL_MS;
       },
 
       canAddMonitor: () => {
-        const { monitors, isPro } = get();
-        if (isPro) return true;
-        return monitors.length < FREE_MAX_MONITORS;
+        return true;
       },
 
       addMonitor: (input: AddMonitorInput) => {
         const { canAddMonitor } = get();
         if (!canAddMonitor()) {
-          return {
-            ok: false,
-            reason: "無料プランは1件までです。Proで無制限にできます。",
-          };
+          return { ok: false, reason: "監視を追加できませんでした" };
         }
+        const slots = (input.childSlots ?? []).slice(
+          0,
+          Math.min(Math.max(input.childGuests ?? 0, 0), 4)
+        );
         const bookingUrl = buildDisneyUrl({
           hotelId: input.hotelId,
           date: input.checkInDate,
           nights: input.nights,
           guests: input.guests,
           childGuests: input.childGuests ?? 0,
-          childAges: input.childAges ?? [],
+          childSlots: slots,
           roomType: input.roomType,
         });
 
@@ -129,10 +131,7 @@ export const useMonitorStore = create<MonitorState>()(
           nights: input.nights,
           guests: input.guests,
           childGuests: input.childGuests ?? 0,
-          childAges: (input.childAges ?? []).slice(
-            0,
-            Math.min(Math.max(input.childGuests ?? 0, 0), 4)
-          ),
+          childSlots: slots,
           roomType: input.roomType,
           notifyLine: input.notifyLine,
           notifyEmail: input.notifyEmail,
@@ -196,8 +195,31 @@ export const useMonitorStore = create<MonitorState>()(
         logs: s.logs,
         isPro: s.isPro,
       }),
+      version: 3,
+      migrate: (persistedState: any, fromVersion?: number) => {
+        const v = typeof fromVersion === "number" ? fromVersion : 0;
+        const next = {
+          ...persistedState,
+          isPro: true,
+        };
+        if (v < 3 && Array.isArray(next.monitors)) {
+          next.monitors = next.monitors.map((m: any) => {
+            if (Array.isArray(m.childSlots)) return m;
+            const n = Math.min(Math.max(m.childGuests ?? 0, 0), 4);
+            const ages: number[] = Array.isArray(m.childAges) ? m.childAges : [];
+            const childSlots: ChildGuestInput[] = ages.slice(0, n).map((ageYears: number) => ({
+              ageYears,
+              sixTrack: ageYears === 6 ? ("preschool" as const) : undefined,
+              bedKey: "defaultExample" as const,
+            }));
+            const { childAges: _omit, ...rest } = m;
+            return { ...rest, childSlots };
+          });
+        }
+        return next;
+      },
     }
   )
 );
 
-export { MIN_INTERVAL_MS, FREE_MAX_MONITORS };
+export { MIN_INTERVAL_MS, PRO_INTERVAL_MS, FREE_MAX_MONITORS };

@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { formatJaDate, formatJaTime } from "@/lib/utils";
 import { getHotelLabel } from "@/lib/urlBuilder";
 import type { AvailabilitySignal } from "@/lib/checker";
+import { formatChildSummaryJa } from "@/lib/tdrChildParams";
 
 function statusBadge(status: AvailabilitySignal | null) {
   if (status === "available") {
@@ -57,7 +58,10 @@ export function MonitorCard({ monitor }: { monitor: Monitor }) {
               <>
                 {" "}
                 ・子ども{monitor.childGuests}名（
-                {(monitor.childAges ?? []).slice(0, monitor.childGuests).join("、")}歳）
+                {formatChildSummaryJa(
+                  (monitor.childSlots ?? []).slice(0, monitor.childGuests)
+                )}
+                ）
               </>
             ) : null}
             {monitor.roomType ? ` · ${monitor.roomType}` : ""}

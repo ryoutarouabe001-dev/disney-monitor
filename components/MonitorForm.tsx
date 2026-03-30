@@ -12,6 +12,12 @@ import {
   getHotelLabel,
   buildDisneyUrl,
 } from "@/lib/urlBuilder";
+import {
+  formatChildSummaryJa,
+  type ChildGuestInput,
+  type SixYearTrack,
+  type TdrChildBedKey,
+} from "@/lib/tdrChildParams";
 import { useMonitorStore } from "@/store/monitorStore";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,11 +47,13 @@ import { cn } from "@/lib/utils";
 import { SpeedMode } from "@/components/SpeedMode";
 import { FakeActivity } from "@/components/FakeActivity";
 
+function defaultChildSlot(): ChildGuestInput {
+  return { ageYears: 5, bedKey: "soine", sixTrack: undefined };
+}
+
 export function MonitorForm() {
   const addMonitor = useMonitorStore((s) => s.addMonitor);
-  const monitorCount = useMonitorStore((s) => s.monitors.length);
-  const isProUser = useMonitorStore((s) => s.isPro);
-  const canAdd = isProUser || monitorCount < 1;
+  const canAdd = useMonitorStore((s) => s.canAddMonitor());
 
   const [hotelId, setHotelId] = useState<HotelId>(DISNEY_HOTELS[0].id);
   const [date, setDate] = useState<Date | undefined>(
@@ -54,7 +62,7 @@ export function MonitorForm() {
   const [nights, setNights] = useState("1");
   const [guests, setGuests] = useState("2");
   const [childGuests, setChildGuests] = useState("0");
-  const [childAges, setChildAges] = useState<number[]>([]);
+  const [childSlots, setChildSlots] = useState<ChildGuestInput[]>([]);
   const [advanced, setAdvanced] = useState(false);
   const [roomType, setRoomType] = useState("");
   const [notifyLine, setNotifyLine] = useState(true);
@@ -73,7 +81,7 @@ export function MonitorForm() {
         nights: Number(nights),
         guests: Number(guests),
         childGuests: Number(childGuests),
-        childAges,
+        childSlots: childSlots.slice(0, Number(childGuests)),
         roomType: roomType.trim() || undefined,
       });
     } catch {
@@ -85,15 +93,15 @@ export function MonitorForm() {
     nights,
     guests,
     childGuests,
-    childAges,
+    childSlots,
     roomType,
   ]);
 
   useEffect(() => {
     const n = Math.min(Math.max(Number(childGuests), 0), 4);
-    setChildAges((prev) => {
+    setChildSlots((prev) => {
       const next = [...prev];
-      while (next.length < n) next.push(0);
+      while (next.length < n) next.push(defaultChildSlot());
       return next.slice(0, n);
     });
   }, [childGuests]);
@@ -107,6 +115,24 @@ export function MonitorForm() {
       toast.error("メール通知の場合はアドレスを入力してください");
       return;
     }
+    const cn = Math.min(Math.max(Number(childGuests), 0), 4);
+    if (cn > 0) {
+      for (let i = 0; i < cn; i++) {
+        const s = childSlots[i];
+        if (!s) {
+          toast.error(`子ども${i + 1}の情報を入力してください`);
+          return;
+        }
+        if (s.ageYears === 6 && !s.sixTrack) {
+          toast.error(`子ども${i + 1}は6歳のため「未就学」か「小学生」を選んでください`);
+          return;
+        }
+        if (s.ageYears !== 6 && s.sixTrack) {
+          toast.error(`子ども${i + 1}: 未就学/小学生の区分は6歳のときだけ選べます`);
+          return;
+        }
+      }
+    }
     setBusy(true);
     await new Promise((r) => setTimeout(r, 280));
     const result = addMonitor({
@@ -115,7 +141,7 @@ export function MonitorForm() {
       nights: Number(nights),
       guests: Number(guests),
       childGuests: Number(childGuests),
-      childAges,
+      childSlots: childSlots.slice(0, cn),
       roomType: roomType.trim() || undefined,
       notifyLine,
       notifyEmail,
@@ -162,9 +188,11 @@ export function MonitorForm() {
                   {Number(childGuests) > 0 ? (
                     <>
                       {" "}
-                      ・子ども{childGuests}名（{childAges
-                        .slice(0, Number(childGuests))
-                        .join("、")}歳）
+                      ・子ども{childGuests}名（
+                      {formatChildSummaryJa(
+                        childSlots.slice(0, Number(childGuests))
+                      )}
+                      ）
                     </>
                   ) : null}
                 </p>
@@ -318,37 +346,121 @@ export function MonitorForm() {
                       </SelectContent>
                     </Select>
                     {Number(childGuests) > 0 && (
-                      <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                      <div className="mt-2 space-y-4">
                         {Array.from({ length: Number(childGuests) }).map(
-                          (_, idx) => (
-                            <div key={idx} className="space-y-2">
-                              <p className="text-xs font-medium text-slate-700">
-                                子ども{idx + 1}の年齢
-                              </p>
-                              <Select
-                                value={String(childAges[idx] ?? 0)}
-                                onValueChange={(v) => {
-                                  const age = Number(v);
-                                  setChildAges((prev) => {
-                                    const next = [...prev];
-                                    next[idx] = age;
-                                    return next;
-                                  });
-                                }}
+                          (_, idx) => {
+                            const slot = childSlots[idx] ?? defaultChildSlot();
+                            const patchSlot = (p: Partial<ChildGuestInput>) => {
+                              setChildSlots((prev) => {
+                                const next = [...prev];
+                                const cur = { ...(next[idx] ?? defaultChildSlot()), ...p };
+                                if (cur.ageYears !== 6) {
+                                  cur.sixTrack = undefined;
+                                } else if (!cur.sixTrack) {
+                                  cur.sixTrack = "preschool";
+                                }
+                                next[idx] = cur;
+                                return next;
+                              });
+                            };
+                            return (
+                              <div
+                                key={idx}
+                                className="rounded-xl border border-slate-200/70 bg-white/50 p-3 shadow-sm"
                               >
-                                <SelectTrigger>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {Array.from({ length: 18 }).map((__, a) => (
-                                    <SelectItem key={a} value={String(a)}>
-                                      {a}歳
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          )
+                                <p className="mb-3 text-xs font-semibold text-slate-800">
+                                  お子さま {idx + 1}
+                                </p>
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                  <div className="space-y-2">
+                                    <Label className="text-xs">年齢</Label>
+                                    <Select
+                                      value={String(slot.ageYears)}
+                                      onValueChange={(v) =>
+                                        patchSlot({ ageYears: Number(v) })
+                                      }
+                                    >
+                                      <SelectTrigger>
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {Array.from({ length: 18 }).map(
+                                          (_, a) => (
+                                            <SelectItem key={a} value={String(a)}>
+                                              {a}歳
+                                            </SelectItem>
+                                          )
+                                        )}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  {slot.ageYears === 6 && (
+                                    <div className="space-y-2">
+                                      <Label className="text-xs">
+                                        6歳の区分
+                                      </Label>
+                                      <Select
+                                        value={slot.sixTrack ?? "preschool"}
+                                        onValueChange={(v) =>
+                                          patchSlot({
+                                            sixTrack: v as SixYearTrack,
+                                          })
+                                        }
+                                      >
+                                        <SelectTrigger>
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="preschool">
+                                            未就学
+                                          </SelectItem>
+                                          <SelectItem value="elementary">
+                                            小学生
+                                          </SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                  )}
+                                  <div className="space-y-2 sm:col-span-2">
+                                    <Label className="text-xs">
+                                      ベッドまわり（公式区分）
+                                    </Label>
+                                    <Select
+                                      value={slot.bedKey}
+                                      onValueChange={(v) =>
+                                        patchSlot({
+                                          bedKey: v as TdrChildBedKey,
+                                        })
+                                      }
+                                    >
+                                      <SelectTrigger>
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="withBed">
+                                          ベッド利用（コード1）
+                                        </SelectItem>
+                                        <SelectItem value="soine">
+                                          添い寝（コード2）
+                                        </SelectItem>
+                                        <SelectItem value="defaultExample">
+                                          公式URL例に近い（コード3）
+                                        </SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                    <p className="text-[11px] leading-relaxed text-slate-500">
+                                      表示は公式サイトの文言と完全一致ではない場合があります。
+                                      6歳区分の内部コードは{" "}
+                                      <code className="rounded bg-slate-100 px-1">
+                                        lib/tdrChildParams.ts
+                                      </code>{" "}
+                                      を実URLに合わせて更新してください。
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          }
                         )}
                       </div>
                     )}

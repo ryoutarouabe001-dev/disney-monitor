@@ -2,28 +2,34 @@
 
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
-import { MIN_INTERVAL_MS, useMonitorStore } from "@/store/monitorStore";
+import {
+  MIN_INTERVAL_MS,
+  PRO_INTERVAL_MS,
+  useMonitorStore,
+} from "@/store/monitorStore";
 import { requestNotify } from "@/lib/notifier";
 import { getHotelLabel } from "@/lib/urlBuilder";
 import { formatJaDate } from "@/lib/utils";
 import type { AvailabilitySignal } from "@/lib/checker";
+import { formatChildSummaryJa } from "@/lib/tdrChildParams";
 
 export function useMonitorEngine() {
   const inFlight = useRef(false);
   const lastRunAt = useRef(0);
+  const isPro = useMonitorStore((s) => s.isPro);
   const tickNonce = useMonitorStore((s) => s.tickNonce);
+  const intervalMs = isPro ? PRO_INTERVAL_MS : MIN_INTERVAL_MS;
 
   const runTick = async () => {
     if (inFlight.current) return;
 
-    /** 本番セーフティ: 最低60秒。Proの10秒はUIのみ（課金未実装）。 */
     const { monitors, setStatuses, pushLog } = useMonitorStore.getState();
 
     const active = monitors.filter((m) => m.enabled);
     if (active.length === 0) return;
 
     const now = Date.now();
-    if (now - lastRunAt.current < MIN_INTERVAL_MS) return;
+    if (now - lastRunAt.current < intervalMs) return;
     lastRunAt.current = now;
 
     inFlight.current = true;
@@ -58,12 +64,12 @@ export function useMonitorEngine() {
         const shouldNotify = prev === "unavailable" && next === "available";
 
         if (shouldNotify) {
-          const childText =
-            m.childGuests > 0
-              ? ` / 子ども${m.childGuests}名（${(m.childAges ?? [])
-                  .slice(0, m.childGuests)
-                  .join("、")}歳）`
-              : "";
+            const childText =
+              m.childGuests > 0
+                ? ` / 子ども${m.childGuests}名（${formatChildSummaryJa(
+                    (m.childSlots ?? []).slice(0, m.childGuests)
+                  )}）`
+                : "";
           const summary = `${getHotelLabel(m.hotelId)} / ${formatJaDate(m.checkIn)} / ${m.nights}泊 / 大人${m.guests}名${childText}`;
           const notifyRes = await requestNotify({
             bookingUrl: m.bookingUrl,
@@ -119,14 +125,13 @@ export function useMonitorEngine() {
 
   useEffect(() => {
     void runTick();
-    const id = window.setInterval(() => void runTick(), MIN_INTERVAL_MS);
+    const id = window.setInterval(() => void runTick(), intervalMs);
     return () => window.clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [intervalMs]);
 
   useEffect(() => {
     if (!tickNonce) return;
     void runTick();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tickNonce]);
+  }, [tickNonce, intervalMs]);
 }

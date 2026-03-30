@@ -1,4 +1,8 @@
 import { format } from "date-fns";
+import {
+  buildChildAgeBedInform,
+  type ChildGuestInput,
+} from "@/lib/tdrChildParams";
 
 /**
  * Tokyo Disney Resort official hotel reservation (Japanese) — list/search entry.
@@ -47,10 +51,13 @@ export type BuildDisneyUrlParams = {
   date: Date;
   nights: number;
   guests: number;
-  /** Child guests count (任意) */
+  /** 子どもの人数（0〜4） */
   childGuests?: number;
-  /** Each child's age (in years). Length should match `childGuests` */
-  childAges?: number[];
+  /**
+   * 子どもは人数ぶんスロットを渡す（年齢・6歳区分・ベッド）。
+   * `childAgeBedInform` は `lib/tdrChildParams.ts` で組み立て。
+   */
+  childSlots?: ChildGuestInput[];
   /** Reserved for future room-type deep links */
   roomType?: string;
 };
@@ -69,7 +76,7 @@ export function buildDisneyUrl(params: BuildDisneyUrlParams): string {
     nights,
     guests,
     childGuests,
-    childAges,
+    childSlots,
     roomType,
   } = params;
   const hotel = DISNEY_HOTELS.find((h) => h.id === hotelId);
@@ -94,13 +101,11 @@ export function buildDisneyUrl(params: BuildDisneyUrlParams): string {
     roomsNum: "1",
   });
 
-  // TDR reservation site expects a "age info" string when `childNum` > 0.
-  // The exact format can change; keep adjustments centralized here.
   if (childNum > 0) {
-    const ages = (childAges ?? []).slice(0, childNum).map((a) => a ?? 0);
-    if (ages.length > 0) {
-      // Best-effort format: comma-separated ages (e.g. "3,7")
-      search.set("childAgeBedInform", ages.join(","));
+    const slots = (childSlots ?? []).slice(0, childNum);
+    const inform = buildChildAgeBedInform(slots);
+    if (inform) {
+      search.set("childAgeBedInform", inform);
     }
   }
 
@@ -114,3 +119,5 @@ export function buildDisneyUrl(params: BuildDisneyUrlParams): string {
 export function getHotelLabel(id: string): string {
   return DISNEY_HOTELS.find((h) => h.id === id)?.name ?? id;
 }
+
+export type { ChildGuestInput } from "@/lib/tdrChildParams";
