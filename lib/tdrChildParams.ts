@@ -17,8 +17,14 @@ export type SixYearTrack = "preschool" | "elementary";
 export const TDR_SIX_YEAR_AGE_CODE: Record<SixYearTrack, string> = {
   /** 6歳・未就学（公式URL例: `06U`） */
   preschool: "06U",
-  /** 6歳・小学生（未就学の `U` に対応して `E` を使う前提の仮置き。必要ならURLで合わせてください） */
-  elementary: "06E",
+  /**
+   * 6歳・小学生:
+   * これまでの実URLで `06E` が「入力内容が正しくありません」になったため、
+   * まず公式内部区分に合わせて `06U` 系へ寄せます。
+   *
+   *（UIの表記は「小学生」のまま。内部コードだけ一致させます）
+   */
+  elementary: "06U",
 };
 
 /** ベッド利用の右1桁。公式の選択肢に合わせてキーを増やせます。 */
