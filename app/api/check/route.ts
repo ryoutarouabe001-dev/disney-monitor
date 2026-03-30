@@ -9,6 +9,32 @@ type Body = {
   url?: string;
 };
 
+async function fetchHtml(url: string, cookieEnabled: boolean) {
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), FETCH_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(url, {
+      signal: ac.signal,
+      headers: {
+        "User-Agent":
+          "MagicVacancy/1.0 (+https://magic-vacancy.local; availability check)",
+        Accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "ja,en;q=0.8",
+        ...(cookieEnabled ? { Cookie: "cookietest=1" } : {}),
+      },
+      redirect: "follow",
+      cache: "no-store",
+    });
+    if (!res.ok) return { html: "", httpStatus: res.status };
+    const html = await res.text();
+    return { html, httpStatus: res.status };
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 export async function POST(req: Request) {
   let body: Body;
   try {
@@ -25,40 +51,41 @@ export async function POST(req: Request) {
     );
   }
 
-  const ac = new AbortController();
-  const t = setTimeout(() => ac.abort(), FETCH_TIMEOUT_MS);
-
   try {
-    const res = await fetch(url, {
-      signal: ac.signal,
-      headers: {
-        "User-Agent":
-          "MagicVacancy/1.0 (+https://magic-vacancy.local; availability check)",
-        Accept:
-          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "ja,en;q=0.8",
-      },
-      redirect: "follow",
-      cache: "no-store",
-    });
-
-    if (!res.ok) {
+    const r1 = await fetchHtml(url, false);
+    if (!r1.html) {
       return NextResponse.json(
         {
           status: "unknown" as const,
-          httpStatus: res.status,
+          httpStatus: r1.httpStatus,
           message: "取得に失敗しました",
         },
         { status: 200 }
       );
     }
 
-    const html = await res.text();
-    const status = parseAvailabilityFromHtml(html);
+    const queueDetected1 =
+      r1.html.includes("queue-it") ||
+      r1.html.includes("queueit") ||
+      r1.html.includes("待ち時間") ||
+      r1.html.includes("オンライン予約");
+
+    let html = r1.html;
+    let status = parseAvailabilityFromHtml(html);
+
+    // queue/待ち画面っぽい場合は cookietest cookie を付けて再取得（Playwright不要）
+    if (queueDetected1 || status === "unknown") {
+      const r2 = await fetchHtml(url, true);
+      if (r2.html) {
+        html = r2.html;
+        status = parseAvailabilityFromHtml(html);
+      }
+    }
 
     return NextResponse.json({
       status,
       checkedAt: new Date().toISOString(),
+      reason: queueDetected1 ? "queue-it" : undefined,
     });
   } catch (e) {
     const aborted = e instanceof Error && e.name === "AbortError";
@@ -69,7 +96,5 @@ export async function POST(req: Request) {
       },
       { status: 200 }
     );
-  } finally {
-    clearTimeout(t);
   }
 }

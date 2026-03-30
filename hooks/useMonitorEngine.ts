@@ -2,11 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
-import {
-  MIN_INTERVAL_MS,
-  PRO_INTERVAL_MS,
-  useMonitorStore,
-} from "@/store/monitorStore";
+import { MIN_INTERVAL_MS, useMonitorStore } from "@/store/monitorStore";
 import { requestNotify } from "@/lib/notifier";
 import { getHotelLabel } from "@/lib/urlBuilder";
 import { formatJaDate } from "@/lib/utils";
@@ -16,9 +12,9 @@ import { formatChildSummaryJa } from "@/lib/tdrChildParams";
 export function useMonitorEngine() {
   const inFlight = useRef(false);
   const lastRunAt = useRef(0);
-  const isPro = useMonitorStore((s) => s.isPro);
   const tickNonce = useMonitorStore((s) => s.tickNonce);
-  const intervalMs = isPro ? PRO_INTERVAL_MS : MIN_INTERVAL_MS;
+  // Safety: 最低60秒間隔で実行（サイト側ゲート/ブロック悪化を防ぐ）
+  const intervalMs = MIN_INTERVAL_MS;
 
   const runTick = async () => {
     if (inFlight.current) return;
@@ -40,14 +36,26 @@ export function useMonitorEngine() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ url: m.bookingUrl }),
         });
-        const data = (await res.json()) as {
-          status?: AvailabilitySignal;
-          checkedAt?: string;
-        };
+          const data = (await res.json()) as {
+            status?: AvailabilitySignal;
+            checkedAt?: string;
+            reason?: string;
+          };
 
-        const next = data.status ?? "unknown";
+          const next = data.status ?? "unknown";
         const checkedAt = data.checkedAt ?? new Date().toISOString();
         const prev = m.currentStatus;
+
+          if (
+            next === "unknown" &&
+            data.reason === "queue-it" &&
+            prev !== "unknown"
+          ) {
+            toast.error("予約サイト側の待ち/ゲートにより取得できませんでした", {
+              description:
+                "空き判定（不明）が続く場合、headlessブラウザ（Playwright）等が必要です。",
+            });
+          }
 
         setStatuses(m.id, {
           previousStatus: prev,
@@ -61,7 +69,8 @@ export function useMonitorEngine() {
           result: next,
         });
 
-        const shouldNotify = prev === "unavailable" && next === "available";
+        // UX優先: 最初から空きが出ている場合（prev が null/unknown）でも通知する
+        const shouldNotify = next === "available" && prev !== "available";
 
         if (shouldNotify) {
             const childText =

@@ -441,10 +441,10 @@ export function MonitorForm() {
                                           ベッド利用（コード1）
                                         </SelectItem>
                                         <SelectItem value="soine">
-                                          添い寝（コード2）
+                                          添い寝（コード3）
                                         </SelectItem>
                                         <SelectItem value="defaultExample">
-                                          公式URL例に近い（コード3）
+                                          その他（コード2）
                                         </SelectItem>
                                       </SelectContent>
                                     </Select>

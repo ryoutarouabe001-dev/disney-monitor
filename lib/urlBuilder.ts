@@ -90,7 +90,8 @@ export function buildDisneyUrl(params: BuildDisneyUrlParams): string {
   const childNum = Math.min(Math.max(childGuests ?? 0, 0), 4);
 
   const search = new URLSearchParams({
-    displayType: "hotel-search",
+    // 公式URLの実例に合わせる（空き判定のHTMLが変わるため）
+    displayType: "data-hotel",
     hotelSearchDetail: "true",
     reservationStatus: "1",
     useDate,
@@ -98,6 +99,19 @@ export function buildDisneyUrl(params: BuildDisneyUrlParams): string {
     adultNum: String(adultNum),
     searchHotelCD: hotel.searchHotelCD,
     childNum: String(childNum),
+    detailOpenFlg: "0",
+    hotelChangeFlg: "false",
+    removeSessionFlg: "true",
+    returnFlg: "false",
+    showWay: "",
+    cpListStr: "",
+    searchHotelDiv: "",
+    hotelName: "",
+    searchHotelName: "",
+    searchLayer: "",
+    searchRoomName: "",
+    checkPointStr: "",
+    hotelShowFlg: "",
     roomsNum: "1",
   });
 

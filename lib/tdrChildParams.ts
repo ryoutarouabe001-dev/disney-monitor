@@ -1,25 +1,24 @@
 /**
  * 東京ディズニーリゾート公式予約の `childAgeBedInform` 組み立て。
  *
- * 観測例（英語サイトのURL）: `childAgeBedInform=01_3%7C05_3%7C`
- * → デコード後 `01_3|05_3|` … お子さま1人につき `{年齢等2桁}_{ベッド1桁}` を `|` で連結し、末尾にも `|` が付くことがある。
+ * 観測例（今回いただいたURL）:
+ * `childAgeBedInform=06U_1%7C01_3%7C`
+ * → デコード後 `06U_1|01_3|`。
  *
- * 【重要】左2桁の「年齢等コード」は公式の内部区分で、6歳の「未就学/小学生」は別コードになる想定です。
- * ここは **開発者ツール → Network** で実際の予約検索時URLの `childAgeBedInform` を開き、
- * 該当する左2桁を `TDR_SIX_YEAR_AGE_CODE` に転記してください（未確定のままだと公式と不一致になり得ます）。
+ * 子ども1人につき、`{年齢区分}_{ベッド区分}` を `|` で連結し、末尾にも `|` が付く形式です。
+ *
+ * 【重要】左側（年齢区分コード）は「2桁だけ」とは限らず、6歳の未就学が `06U` のように
+ * 文字を含むケースがあります。まずはあなたのURLに一致するように 6歳 と ベッド を定義します。
  */
 
 export type SixYearTrack = "preschool" | "elementary";
 
 /** 6歳の区分 → `childAgeBedInform` 左側2桁（要: 公式URLで確認・更新） */
 export const TDR_SIX_YEAR_AGE_CODE: Record<SixYearTrack, string> = {
-  /** 6歳・未就学（仮: `06` — ブラウザの実URLで要確認） */
-  preschool: "06",
-  /**
-   * 6歳・小学生（仮: `26` — 7歳が `07` になる前提で衝突回避の仮置き）
-   * 必ず公式サイトで実際に生成される2桁に差し替えてください。
-   */
-  elementary: "26",
+  /** 6歳・未就学（公式URL例: `06U`） */
+  preschool: "06U",
+  /** 6歳・小学生（未就学の `U` に対応して `E` を使う前提の仮置き。必要ならURLで合わせてください） */
+  elementary: "06E",
 };
 
 /** ベッド利用の右1桁。公式の選択肢に合わせてキーを増やせます。 */
@@ -27,9 +26,9 @@ export const TDR_CHILD_BED_CODES = {
   /** ベッド利用（子ども用ベッドを使う・要確認） */
   withBed: "1",
   /** 添い寝（ベッドなし・要確認） */
-  soine: "2",
-  /** その他（英語サイト例では `3` が使われていたためデフォルト候補） */
-  defaultExample: "3",
+  soine: "3",
+  /** その他（調整用） */
+  defaultExample: "2",
 } as const;
 
 export type TdrChildBedKey = keyof typeof TDR_CHILD_BED_CODES;
@@ -54,7 +53,7 @@ export function getTdrChildAgeCode(slot: ChildGuestInput): string {
   if (slot.ageYears === 6) {
     const t = slot.sixTrack ?? "preschool";
     const code = TDR_SIX_YEAR_AGE_CODE[t];
-    return /^\d{2}$/.test(code) ? code : "06";
+    return code;
   }
   return pad2(slot.ageYears);
 }
@@ -84,8 +83,8 @@ export function formatChildSummaryJa(slots: ChildGuestInput[]): string {
         s.bedKey === "withBed"
           ? "ベッド利用"
           : s.bedKey === "soine"
-            ? "添い寝"
-            : "区分例(3)";
+            ? "添い寝（ベッドなし）"
+            : "その他（区分コード2）";
       return `${i + 1}人目:${agePart}・${bedPart}`;
     })
     .join(" / ");
