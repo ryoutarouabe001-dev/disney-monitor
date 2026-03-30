@@ -35,6 +35,14 @@ async function fetchHtml(url: string, cookieEnabled: boolean) {
   }
 }
 
+function detectReservationInputError(html: string): boolean {
+  return (
+    html.includes("お子様の情報の入力内容が正しくありません") ||
+    html.includes("小人年齢の入力内容が正しくありません") ||
+    html.includes("小人年齢")
+  );
+}
+
 export async function POST(req: Request) {
   let body: Body;
   try {
@@ -82,10 +90,12 @@ export async function POST(req: Request) {
       }
     }
 
+    const invalidChildInfo = detectReservationInputError(html);
     return NextResponse.json({
       status,
       checkedAt: new Date().toISOString(),
       reason: queueDetected1 ? "queue-it" : undefined,
+      ...(invalidChildInfo ? { reason: "invalid-child-info" as const } : {}),
     });
   } catch (e) {
     const aborted = e instanceof Error && e.name === "AbortError";

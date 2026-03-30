@@ -13,6 +13,7 @@ export function useMonitorEngine() {
   const inFlight = useRef(false);
   const lastRunAt = useRef(0);
   const tickNonce = useMonitorStore((s) => s.tickNonce);
+  const lastInvalidToastAt = useRef(0);
   // Safety: 最低60秒間隔で実行（サイト側ゲート/ブロック悪化を防ぐ）
   const intervalMs = MIN_INTERVAL_MS;
 
@@ -46,7 +47,20 @@ export function useMonitorEngine() {
         const checkedAt = data.checkedAt ?? new Date().toISOString();
         const prev = m.currentStatus;
 
-          if (
+          if (data.reason === "invalid-child-info") {
+            // 同じ間違いが繰り返されるので、かなり強いメッセージにする
+            const nowTs = Date.now();
+            if (nowTs - lastInvalidToastAt.current > 60_000) {
+              lastInvalidToastAt.current = nowTs;
+              toast.error(
+                "子ども情報の入力が不正です（公式に合わせて調整が必要）",
+                {
+                  description:
+                    "アプリのデバッグ欄で `childAgeBedInform` を確認してください（例: `06U_1|01_3|`）。",
+                }
+              );
+            }
+          } else if (
             next === "unknown" &&
             data.reason === "queue-it" &&
             prev !== "unknown"

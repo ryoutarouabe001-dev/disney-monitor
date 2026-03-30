@@ -546,10 +546,10 @@ export function MonitorForm() {
                                       </SelectTrigger>
                                       <SelectContent>
                                         <SelectItem value="withBed">
-                                          ベッド利用（コード1）
+                                          ベッドあり（コード1）
                                         </SelectItem>
                                         <SelectItem value="soine">
-                                          添い寝（コード3）
+                                          ベッドなし（コード3）
                                         </SelectItem>
                                       </SelectContent>
                                     </Select>
