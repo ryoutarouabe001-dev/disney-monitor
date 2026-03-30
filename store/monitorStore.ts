@@ -195,29 +195,16 @@ export const useMonitorStore = create<MonitorState>()(
         logs: s.logs,
         isPro: s.isPro,
       }),
-      version: 3,
-      migrate: (persistedState: any, fromVersion?: number) => {
-        const v = typeof fromVersion === "number" ? fromVersion : 0;
-        const next = {
-          ...persistedState,
-          isPro: true,
-        };
-        if (v < 3 && Array.isArray(next.monitors)) {
-          next.monitors = next.monitors.map((m: any) => {
-            if (Array.isArray(m.childSlots)) return m;
-            const n = Math.min(Math.max(m.childGuests ?? 0, 0), 4);
-            const ages: number[] = Array.isArray(m.childAges) ? m.childAges : [];
-            const childSlots: ChildGuestInput[] = ages.slice(0, n).map((ageYears: number) => ({
-              ageYears,
-              sixTrack: ageYears === 6 ? ("preschool" as const) : undefined,
-              bedKey: "defaultExample" as const,
-            }));
-            const { childAges: _omit, ...rest } = m;
-            return { ...rest, childSlots };
-          });
-        }
-        return next;
-      },
+      version: 4,
+      // 仕様が大きく変わる（childAgeBedInform の内部コード体系）ため、
+      // 既存の localStorage を安全にリセットして作り直しを促します。
+      migrate: (persistedState: any) => ({
+        ...persistedState,
+        isPro: true,
+        monitors: [],
+        logs: [],
+        tickNonce: 0,
+      }),
     }
   )
 );
