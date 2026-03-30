@@ -12,6 +12,10 @@ export type CheckLogEntry = {
   monitorId: string;
   at: string;
   result: AvailabilitySignal;
+  /** APIが返した理由（例: invalid-child-info / parse-unknown / queue-it） */
+  reason?: string;
+  /** 取得できたHTMLのサイズ（どの段階のページか把握用） */
+  htmlSize?: number;
 };
 
 export type Monitor = {

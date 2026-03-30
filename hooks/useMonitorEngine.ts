@@ -44,8 +44,15 @@ export function useMonitorEngine() {
           };
 
           const next = data.status ?? "unknown";
-        const checkedAt = data.checkedAt ?? new Date().toISOString();
-        const prev = m.currentStatus;
+          const checkedAt = data.checkedAt ?? new Date().toISOString();
+          const prev = m.currentStatus;
+
+          const reason = data.reason;
+          const debugSteps = (data as any).debug?.steps as
+            | Array<{ size?: number }>
+            | undefined;
+          const lastStep = debugSteps?.[debugSteps.length - 1];
+          const htmlSize = lastStep?.size;
 
           if (data.reason === "invalid-child-info") {
             // 同じ間違いが繰り返されるので、かなり強いメッセージにする
@@ -86,6 +93,8 @@ export function useMonitorEngine() {
           monitorId: m.id,
           at: checkedAt,
           result: next,
+          reason,
+          htmlSize,
         });
 
         // UX優先: 最初から空きが出ている場合（prev が null/unknown）でも通知する

@@ -107,6 +107,13 @@ export function Dashboard() {
                       {resultJa}
                     </span>
                   </span>
+                  {(log.reason || log.htmlSize) && (
+                    <span className="w-full text-[11px] text-slate-500 sm:w-auto sm:text-right">
+                      {log.reason ? `理由: ${log.reason}` : ""}
+                      {log.reason && log.htmlSize ? " / " : ""}
+                      {typeof log.htmlSize === "number" ? `HTML: ${log.htmlSize}` : ""}
+                    </span>
+                  )}
                 </li>
               );
             })}
