@@ -45,7 +45,7 @@ export function Dashboard() {
               監視ダッシュボード
             </h2>
             <p className="text-sm text-slate-500">
-              有効な監視が10秒ごとに自動チェックされます。このタブを閉じると監視は停止します。
+              有効な監視は最低60秒間隔で自動チェックされます。このタブを閉じると監視は停止します。
             </p>
           </div>
         </motion.div>

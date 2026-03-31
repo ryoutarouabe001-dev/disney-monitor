@@ -185,6 +185,9 @@ export async function POST(req: Request) {
       {
         status: "unknown" as const,
         message: aborted ? "タイムアウトしました" : "チェックエラー",
+        reason: aborted ? "timeout" : "check-error",
+        checkedAt: new Date().toISOString(),
+        debug: { steps: [] as never[] },
       },
       { status: 200 }
     );
