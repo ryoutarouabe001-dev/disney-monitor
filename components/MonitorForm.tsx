@@ -47,6 +47,11 @@ import {
 import { cn } from "@/lib/utils";
 import { SpeedMode } from "@/components/SpeedMode";
 import { FakeActivity } from "@/components/FakeActivity";
+import {
+  requestBrowserNotificationPermission,
+  sendBrowserAlert,
+  unlockAudio,
+} from "@/lib/clientAlerts";
 
 function defaultChildSlot(): ChildGuestInput {
   return { ageYears: 5, bedKey: "soine", sixTrack: undefined };
@@ -69,6 +74,8 @@ export function MonitorForm() {
   const [roomType, setRoomType] = useState("");
   const [notifyLine, setNotifyLine] = useState(true);
   const [notifyEmail, setNotifyEmail] = useState(false);
+  const [notifyBrowser, setNotifyBrowser] = useState(true);
+  const [notifySound, setNotifySound] = useState(true);
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -159,6 +166,8 @@ export function MonitorForm() {
       roomType: roomType.trim() || undefined,
       notifyLine,
       notifyEmail,
+      notifyBrowser,
+      notifySound,
       notifyEmailAddress: notifyEmail ? email.trim() : undefined,
     };
 
@@ -592,6 +601,109 @@ export function MonitorForm() {
                       </p>
                     </div>
                     <Switch checked={notifyLine} onCheckedChange={setNotifyLine} />
+                  </div>
+                  <div className="space-y-2 rounded-xl border border-slate-100 bg-white/80 px-3 py-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-slate-800">
+                          ブラウザ通知（おすすめ）
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          Hobbyでも一番成功率が高い通知手段です（タブを開いている間）
+                        </p>
+                      </div>
+                      <Switch
+                        checked={notifyBrowser}
+                        onCheckedChange={setNotifyBrowser}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-center justify-between gap-3 rounded-lg bg-white/60 px-3 py-2 sm:flex-1">
+                        <div>
+                          <p className="text-sm font-medium text-slate-800">
+                            音で知らせる
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            最初に「音を有効化」を押す必要があります
+                          </p>
+                        </div>
+                        <Switch
+                          checked={notifySound}
+                          onCheckedChange={setNotifySound}
+                        />
+                      </div>
+                      <div className="flex gap-2 sm:justify-end">
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="rounded-xl"
+                          onClick={async () => {
+                            const perm =
+                              await requestBrowserNotificationPermission();
+                            const audioOk = await unlockAudio();
+                            if (perm === "granted") {
+                              toast.success("ブラウザ通知を許可しました");
+                            } else if (perm === "denied") {
+                              toast.error(
+                                "ブラウザ通知がブロックされています（ブラウザ設定で許可してください）"
+                              );
+                            } else if (perm === "unsupported") {
+                              toast.error(
+                                "このブラウザは通知に対応していません"
+                              );
+                            } else {
+                              toast.message(
+                                "ブラウザ通知はまだ許可されていません"
+                              );
+                            }
+
+                            if (notifySound) {
+                              if (audioOk) {
+                                toast.success("音を有効化しました");
+                              } else {
+                                toast.message(
+                                  "音の有効化に失敗しました（ミュート/省電力/自動再生制限を確認）"
+                                );
+                              }
+                            }
+                          }}
+                        >
+                          許可/音を有効化
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="rounded-xl"
+                          onClick={async () => {
+                            const r = await sendBrowserAlert({
+                              title: "Magic Vacancy テスト通知",
+                              body: "通知と音が出るか確認できます。",
+                              sound: notifySound,
+                            });
+                            if (!r.notified) {
+                              toast.message("通知は出ませんでした", {
+                                description:
+                                  r.permission === "denied"
+                                    ? "ブラウザのサイト設定で通知を許可してください。"
+                                    : r.permission === "unsupported"
+                                      ? "この環境はブラウザ通知に非対応です。"
+                                      : "通知が許可されていない可能性があります。",
+                              });
+                            } else {
+                              toast.success("テスト通知を送信しました");
+                            }
+                            if (notifySound && !r.sounded) {
+                              toast.message("音が鳴りませんでした", {
+                                description:
+                                  "「許可/音を有効化」を押した後、ミュートや省電力設定も確認してください。",
+                              });
+                            }
+                          }}
+                        >
+                          テスト
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                   <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-white/80 px-3 py-2">
                     <div>

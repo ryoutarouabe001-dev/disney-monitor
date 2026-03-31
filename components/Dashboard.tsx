@@ -9,6 +9,19 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatJaDate, formatJaTime } from "@/lib/utils";
 import { getHotelLabel } from "@/lib/urlBuilder";
 
+function formatLogReasonJa(reason: string | undefined): string | undefined {
+  if (!reason) return undefined;
+  const map: Record<string, string> = {
+    "platform-limit": "プラットフォームの実行時間上限（Hobbyは約10秒）",
+    timeout: "取得タイムアウト",
+    "check-error": "チェック処理エラー",
+    "invalid-child-info": "子ども人数・年齢パラメータ不正",
+    "parse-unknown": "HTMLから空きを判定できず",
+    "queue-it": "待ち行列/ゲートページ",
+  };
+  return map[reason] ?? reason;
+}
+
 export function Dashboard() {
   const monitors = useMonitorStore((s) => s.monitors);
   const logs = useMonitorStore((s) => s.logs);
@@ -109,7 +122,9 @@ export function Dashboard() {
                   </span>
                   {(log.reason || log.htmlSize) && (
                     <span className="w-full text-[11px] text-slate-500 sm:w-auto sm:text-right">
-                      {log.reason ? `理由: ${log.reason}` : ""}
+                      {log.reason
+                        ? `理由: ${formatLogReasonJa(log.reason) ?? log.reason}`
+                        : ""}
                       {log.reason && log.htmlSize ? " / " : ""}
                       {typeof log.htmlSize === "number" ? `HTML: ${log.htmlSize}` : ""}
                     </span>

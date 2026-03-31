@@ -8,12 +8,14 @@ import { getHotelLabel } from "@/lib/urlBuilder";
 import { formatJaDate } from "@/lib/utils";
 import type { AvailabilitySignal } from "@/lib/checker";
 import { formatChildSummaryJa } from "@/lib/tdrChildParams";
+import { sendBrowserAlert } from "@/lib/clientAlerts";
 
 export function useMonitorEngine() {
   const inFlight = useRef(false);
   const lastRunAt = useRef(0);
   const tickNonce = useMonitorStore((s) => s.tickNonce);
   const lastInvalidToastAt = useRef(0);
+  const lastPlatformLimitToastAt = useRef(0);
   // Safety: 最低60秒間隔で実行（サイト側ゲート/ブロック悪化を防ぐ）
   const intervalMs = MIN_INTERVAL_MS;
 
@@ -72,6 +74,15 @@ export function useMonitorEngine() {
               description:
                 "公式予約サイト側がゲート/JS依存でHTMLにデータを含めない場合があります。しばらく待って再試行してください。",
             });
+          } else if (data.reason === "platform-limit") {
+            const nowPl = Date.now();
+            if (nowPl - lastPlatformLimitToastAt.current > 90_000) {
+              lastPlatformLimitToastAt.current = nowPl;
+              toast.error("実行時間の上限に達しました（Vercel Hobby）", {
+                description:
+                  "無料プランではサーバー処理が約10秒で打ち切られます。公式ページの取得が間に合わないことがあります。安定運用には Pro（最大実行時間の拡大）や自前サーバー（Docker）でのホストを検討してください。",
+              });
+            }
           } else if (
             next === "unknown" &&
             data.reason === "queue-it" &&
@@ -108,15 +119,32 @@ export function useMonitorEngine() {
                   )}）`
                 : "";
           const summary = `${getHotelLabel(m.hotelId)} / ${formatJaDate(m.checkIn)} / ${m.nights}泊 / 大人${m.guests}名${childText}`;
-          const notifyRes = await requestNotify({
-            bookingUrl: m.bookingUrl,
-            summary,
-            methods: {
-              line: m.notifyLine,
-              email: m.notifyEmail,
-            },
-            emailTo: m.notifyEmailAddress,
-          });
+          // Hobby前提: ブラウザ通知をまず試す（サーバー側依存を減らす）
+          const browserTitle = "空きが出ました！";
+          const browserBody = summary;
+          const browser =
+            m.notifyBrowser || m.notifySound
+              ? await sendBrowserAlert({
+                  title: browserTitle,
+                  body: browserBody,
+                  url: m.bookingUrl,
+                  tag: `mv_${m.id}`,
+                  sound: Boolean(m.notifySound),
+                })
+              : { notified: false, sounded: false, permission: "unsupported" as const };
+
+          const useServerNotify = m.notifyLine || m.notifyEmail;
+          const notifyRes = useServerNotify
+            ? await requestNotify({
+                bookingUrl: m.bookingUrl,
+                summary,
+                methods: {
+                  line: m.notifyLine,
+                  email: m.notifyEmail,
+                },
+                emailTo: m.notifyEmailAddress,
+              })
+            : { ok: true as const };
 
           if (notifyRes.ok) {
             toast.success("空きを検知しました！", {
@@ -132,8 +160,15 @@ export function useMonitorEngine() {
                 },
               },
             });
-            if (notifyRes.warning) {
-              toast.message(notifyRes.warning);
+            if ((notifyRes as any).warning) toast.message((notifyRes as any).warning);
+            if (
+              (m.notifyBrowser || m.notifySound) &&
+              !browser.notified &&
+              browser.permission === "denied"
+            ) {
+              toast.message("ブラウザ通知がブロックされています", {
+                description: "ブラウザのサイト設定で通知を許可してください。",
+              });
             }
           } else {
             toast.error(notifyRes.error ?? "通知に失敗しました", {

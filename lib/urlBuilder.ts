@@ -1,6 +1,7 @@
 import { format } from "date-fns";
 import {
   buildChildAgeBedInform,
+  TDR_CHILD_BED_CODES,
   type ChildGuestInput,
 } from "@/lib/tdrChildParams";
 
@@ -121,6 +122,13 @@ export function buildDisneyUrl(params: BuildDisneyUrlParams): string {
     if (inform) {
       search.set("childAgeBedInform", inform);
     }
+    // 公式URLの観測例に合わせて bed_1.. を付与（childAgeBedInform と合わせる）
+    // 例: bed_1=3 (添い寝), bed_2=1 (ベッドあり)
+    slots.forEach((s, idx) => {
+      const key = `bed_${idx + 1}`;
+      const bedDigit = TDR_CHILD_BED_CODES[s.bedKey] ?? TDR_CHILD_BED_CODES.soine;
+      search.set(key, bedDigit);
+    });
   }
 
   if (roomType?.trim()) {
