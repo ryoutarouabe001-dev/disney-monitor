@@ -81,35 +81,39 @@ export async function requestBrowserNotificationPermission(): Promise<
 export async function sendBrowserAlert(
   payload: BrowserAlertPayload
 ): Promise<{ notified: boolean; sounded: boolean; permission: NotificationPermission | "unsupported" }> {
-  const permission = await requestBrowserNotificationPermission();
-  let notified = false;
-  let sounded = false;
+  try {
+    const permission = await requestBrowserNotificationPermission();
+    let notified = false;
+    let sounded = false;
 
-  if (permission === "granted") {
-    try {
-      const n = new Notification(payload.title, {
-        body: payload.body,
-        tag: payload.tag,
-      });
-      if (payload.url) {
-        n.onclick = () => {
-          try {
-            window.open(payload.url, "_blank", "noopener,noreferrer");
-          } catch {
-            /* ignore */
-          }
-        };
+    if (permission === "granted") {
+      try {
+        const n = new Notification(payload.title, {
+          body: payload.body,
+          tag: payload.tag,
+        });
+        if (payload.url) {
+          n.onclick = () => {
+            try {
+              window.open(payload.url, "_blank", "noopener,noreferrer");
+            } catch {
+              /* ignore */
+            }
+          };
+        }
+        notified = true;
+      } catch {
+        notified = false;
       }
-      notified = true;
-    } catch {
-      notified = false;
     }
-  }
 
-  if (payload.sound) {
-    sounded = await playBeep();
-  }
+    if (payload.sound) {
+      sounded = await playBeep();
+    }
 
-  return { notified, sounded, permission };
+    return { notified, sounded, permission };
+  } catch {
+    return { notified: false, sounded: false, permission: "unsupported" };
+  }
 }
 

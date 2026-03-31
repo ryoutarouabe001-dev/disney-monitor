@@ -72,7 +72,8 @@ export function MonitorForm() {
   const [childSlots, setChildSlots] = useState<ChildGuestInput[]>([]);
   const [advanced, setAdvanced] = useState(false);
   const [roomType, setRoomType] = useState("");
-  const [notifyLine, setNotifyLine] = useState(true);
+  /** Hobby運用ではサーバー通知は未設定で失敗しやすいので既定OFF（ブラウザ通知が主） */
+  const [notifyLine, setNotifyLine] = useState(false);
   const [notifyEmail, setNotifyEmail] = useState(false);
   const [notifyBrowser, setNotifyBrowser] = useState(true);
   const [notifySound, setNotifySound] = useState(true);

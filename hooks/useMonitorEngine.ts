@@ -119,21 +119,33 @@ export function useMonitorEngine() {
                   )}）`
                 : "";
           const summary = `${getHotelLabel(m.hotelId)} / ${formatJaDate(m.checkIn)} / ${m.nights}泊 / 大人${m.guests}名${childText}`;
+          const notifyBrowser = m.notifyBrowser ?? true;
+          const notifySound = m.notifySound ?? true;
+
           // Hobby前提: ブラウザ通知をまず試す（サーバー側依存を減らす）
           const browserTitle = "空きが出ました！";
           const browserBody = summary;
-          const browser =
-            m.notifyBrowser || m.notifySound
-              ? await sendBrowserAlert({
-                  title: browserTitle,
-                  body: browserBody,
-                  url: m.bookingUrl,
-                  tag: `mv_${m.id}`,
-                  sound: Boolean(m.notifySound),
-                })
-              : { notified: false, sounded: false, permission: "unsupported" as const };
+          let browser: {
+            notified: boolean;
+            sounded: boolean;
+            permission: NotificationPermission | "unsupported";
+          } = { notified: false, sounded: false, permission: "unsupported" };
 
-          const useServerNotify = m.notifyLine || m.notifyEmail;
+          if (notifyBrowser || notifySound) {
+            try {
+              browser = await sendBrowserAlert({
+                title: browserTitle,
+                body: browserBody,
+                url: m.bookingUrl,
+                tag: `mv_${m.id}`,
+                sound: Boolean(notifySound),
+              });
+            } catch {
+              browser = { notified: false, sounded: false, permission: "unsupported" };
+            }
+          }
+
+          const useServerNotify = Boolean(m.notifyLine || m.notifyEmail);
           const notifyRes = useServerNotify
             ? await requestNotify({
                 bookingUrl: m.bookingUrl,
@@ -146,7 +158,10 @@ export function useMonitorEngine() {
               })
             : { ok: true as const };
 
-          if (notifyRes.ok) {
+          const clientOk = browser.notified || browser.sounded;
+          const serverOk = notifyRes.ok === true;
+
+          if (clientOk || serverOk) {
             toast.success("空きを検知しました！", {
               description: "この条件で予約ページへ進めます。",
               action: {
@@ -160,9 +175,18 @@ export function useMonitorEngine() {
                 },
               },
             });
-            if ((notifyRes as any).warning) toast.message((notifyRes as any).warning);
+            const warn = (notifyRes as { warning?: string }).warning;
+            if (warn) toast.message(warn);
+            if (useServerNotify && !serverOk) {
+              toast.message("LINE/メール通知だけ失敗しました", {
+                description:
+                  typeof notifyRes.error === "string"
+                    ? notifyRes.error
+                    : "トークン・SMTPの環境変数を確認してください。ブラウザ通知は届いています。",
+              });
+            }
             if (
-              (m.notifyBrowser || m.notifySound) &&
+              (notifyBrowser || notifySound) &&
               !browser.notified &&
               browser.permission === "denied"
             ) {
@@ -171,10 +195,15 @@ export function useMonitorEngine() {
               });
             }
           } else {
-            toast.error(notifyRes.error ?? "通知に失敗しました", {
-              description:
-                "設定を確認するか、画面から直接予約URLを開いてください。",
-            });
+            toast.error(
+              typeof notifyRes.error === "string"
+                ? notifyRes.error
+                : "通知に失敗しました",
+              {
+                description:
+                  "ブラウザ通知の許可/音の有効化を確認するか、予約URLを手動で開いてください。",
+              }
+            );
           }
         }
       } catch {

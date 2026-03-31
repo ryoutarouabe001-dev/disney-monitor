@@ -207,16 +207,28 @@ export const useMonitorStore = create<MonitorState>()(
         logs: s.logs,
         isPro: s.isPro,
       }),
-      version: 4,
-      // 仕様が大きく変わる（childAgeBedInform の内部コード体系）ため、
-      // 既存の localStorage を安全にリセットして作り直しを促します。
-      migrate: (persistedState: any) => ({
-        ...persistedState,
-        isPro: true,
-        monitors: [],
-        logs: [],
-        tickNonce: 0,
-      }),
+      version: 5,
+      /** v4→v5: ブラウザ通知フィールドを既存監視に補完（データは消さない） */
+      migrate: (persistedState: unknown) => {
+        const s =
+          persistedState && typeof persistedState === "object"
+            ? { ...(persistedState as Record<string, unknown>) }
+            : {};
+        const monitors = Array.isArray(s.monitors) ? s.monitors : [];
+        const logs = Array.isArray(s.logs) ? s.logs : [];
+        return {
+          ...s,
+          isPro: true,
+          monitors: monitors.map((m: any) => ({
+            ...m,
+            notifyBrowser:
+              typeof m.notifyBrowser === "boolean" ? m.notifyBrowser : true,
+            notifySound:
+              typeof m.notifySound === "boolean" ? m.notifySound : true,
+          })),
+          logs,
+        };
+      },
     }
   )
 );
