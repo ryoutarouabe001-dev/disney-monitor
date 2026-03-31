@@ -53,8 +53,10 @@ export type AddMonitorInput = {
   roomType?: string;
   notifyLine: boolean;
   notifyEmail: boolean;
-  notifyBrowser: boolean;
-  notifySound: boolean;
+  /** 省略時は true（Hobby運用の既定） */
+  notifyBrowser?: boolean;
+  /** 省略時は true */
+  notifySound?: boolean;
   notifyEmailAddress?: string;
 };
 
@@ -145,8 +147,8 @@ export const useMonitorStore = create<MonitorState>()(
           roomType: input.roomType,
           notifyLine: input.notifyLine,
           notifyEmail: input.notifyEmail,
-          notifyBrowser: input.notifyBrowser,
-          notifySound: input.notifySound,
+          notifyBrowser: input.notifyBrowser ?? true,
+          notifySound: input.notifySound ?? true,
           notifyEmailAddress: input.notifyEmailAddress,
           enabled: true,
           bookingUrl,
